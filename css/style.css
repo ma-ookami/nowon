@@ -249,11 +249,18 @@ h2{font-family:var(--f-display);font-size:17px;text-wrap:balance}
 .ym-lead{margin:4px 0 2px;font-weight:800;font-size:14px}
 .shelf-head{display:flex;align-items:baseline;justify-content:space-between;padding-top:4px}
 .shelf-lead{margin:-6px 0 0}
-.tabs a{min-width:88px;padding:9px 14px}
+.tabs a{min-width:84px;padding:9px 13px;white-space:nowrap}
 
 .s-side{flex:none;display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:6px}
 .s-side .s-more{margin-top:0}
 .s-star{width:34px;height:34px;border-radius:50%;border:0;background:none;color:var(--muted);font-size:19px;line-height:1}
-.s-star.on{color:#f4cf3a}
+.s-star{font-size:17px;filter:grayscale(1);opacity:.45;transition:filter .15s,opacity .15s,transform .15s}
+.s-star.on{filter:none;opacity:1;transform:rotate(-12deg)}
 .m-btn{white-space:nowrap}
 .m-sub{font-weight:700;color:var(--muted)}
+
+/* songs Now ON picks */
+.bots{border-style:dashed}
+.bot-tag{font-size:11px;font-weight:800;padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.bot-lead{margin:0 0 2px}
+.s-from .cdot{width:12px;height:12px}

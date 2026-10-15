@@ -159,6 +159,30 @@ function openUrl(s, app){
 }
 const exactIn = (s, app) => app === "spotify" ? !!s.sp : app === "apple" ? !!s.am : !!s.yt;
 
+// ---------- songs Now ON picks for a day's 3 colors (while few people are here) ----------
+// The same day and 3 colors always give the same picks, so everyone in the playlist hears the same songs.
+function seeded(text){
+  let x = 2166136261;
+  for (let i = 0; i < text.length; i++) x = Math.imul(x ^ text.charCodeAt(i), 16777619);
+  return () => {
+    x = Math.imul(x ^ (x >>> 15), 2246822507); x = Math.imul(x ^ (x >>> 13), 3266489909); x ^= x >>> 16;
+    return (x >>> 0) / 4294967296;
+  };
+}
+async function pickMoodSongs(day, combo, n){
+  const rnd = seeded(day + "|" + combo), ids = comboIds(combo), out = [], seen = new Set();
+  for (let i = 0; i < n * 3 && out.length < n; i++){
+    const mood = ids[out.length % 3], words = COLORS[mood].q;
+    const term = words[Math.floor(rnd() * words.length)];
+    const pool = (await itunesSearch(term, 25).catch(() => [])).filter(s => !seen.has(s.am));
+    if (!pool.length) continue;
+    const s = pool[Math.floor(rnd() * pool.length)];
+    seen.add(s.am);
+    out.push({ id:"bot_" + s.am, t:s.t, a:s.a, am:s.am, sp:"", yt:"", art:s.art, at:0, mood });
+  }
+  return out;
+}
+
 // ---------- 30-second previews (Apple only) ----------
 const player = new Audio();
 player.preload = "none";

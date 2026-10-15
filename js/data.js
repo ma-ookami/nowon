@@ -14,7 +14,7 @@ async function startDay(){
   stopSubs();
   const day = todayKey();
   Object.assign(S, { day, pick:null, pickLoaded:false, mySid:null, count:null, songs:[], songsLoaded:false,
-    neighbor:null, draft:[], add:{ status:"idle" }, rank:null, fresh:new Set(), tally:{}, tallyLoaded:false, ymine:null, moodOpen:null });
+    neighbor:null, draft:[], add:{ status:"idle" }, rank:null, fresh:new Set(), tally:{}, tallyLoaded:false, ymine:null, moodOpen:null, bots:[], botsKey:null });
   groupWatched = null; neighborFor = null; compared = false;
   render();
   S.mySid = await songIdFor(day, S.uid);
@@ -53,6 +53,7 @@ function watchGroup(){
     S.songsLoaded = true;
     noteChanges(); render(); maybeNeighbor();
   }, onSubError));
+  loadBots();
   S.unsubs.push(S.db.collection(`days/${day}/groups/${p.g}/tally`).onSnapshot(snap => {
     if (S.day !== day) return;
     const t = { ...S.tally };
@@ -105,6 +106,25 @@ function saveSeen(){
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && S.pick){ compared = false; noteChanges(); render(); }
 });
+
+// ---------- songs Now ON picks: 3 while the playlist has up to 4 people, 1 up to 10, none after that ----------
+function botCount(){
+  const size = groupSize();
+  return size == null ? 0 : size <= 4 ? 3 : size <= 10 ? 1 : 0;
+}
+async function loadBots(){
+  if (!S.pick) return;
+  const key = S.day + "|" + S.pick.combo;
+  if (S.botsKey === key) return;
+  S.botsKey = key;
+  const cached = ls.get("bots", null);
+  if (cached && cached.key === key && Array.isArray(cached.songs)){ S.bots = cached.songs; render(); return; }
+  const songs = await pickMoodSongs(S.day, S.pick.combo, 3);
+  if (S.botsKey !== key) return;
+  S.bots = songs;
+  if (songs.length) ls.set("bots", { key, songs });
+  render();
+}
 
 // people in my playlist: playlists fill up 30 at a time
 function groupSize(){
@@ -263,7 +283,7 @@ function cleanTally(d){
 let reacting = false;
 async function react(sid, c){
   const ctx = songCtx.get(sid);
-  if (!ctx || ctx.mine || ctx.day !== S.day || reacting) return;
+  if (!ctx || ctx.mine || ctx.bot || ctx.day !== S.day || reacting) return;
   if (todayKey() !== S.day) return;
   const known = myReacts()[sid];
   if (known !== undefined && (c === -1 || c === known)) return;
@@ -295,7 +315,7 @@ async function react(sid, c){
 // listened to the end, or opened it in a music app: counts once as "聴いた"
 function listened(sid){
   const ctx = songCtx.get(sid);
-  if (ctx && !ctx.mine && ctx.day === S.day && myReacts()[sid] === undefined) react(sid, -1);
+  if (ctx && !ctx.mine && !ctx.bot && ctx.day === S.day && myReacts()[sid] === undefined) react(sid, -1);
 }
 
 // ---------- my shelf: songs to keep, from any day ----------
@@ -319,11 +339,11 @@ async function toggleShelf(s){
     if (onShelf(s.id)){
       S.shelf = S.shelf.filter(x => x.id !== s.id); render();
       await ref.delete();
-      toast("たなから出しました");
+      toast("ボードから外しました");
     } else {
       const day = ctx.day || s.day, combo = ctx.g ? groupCombo(ctx.g) : s.combo;
       await ref.set({ t:s.t, a:s.a, am:s.am, sp:s.sp, yt:s.yt, art:s.art, at:Date.now(), day, combo });
-      toast("たなに入れました");
+      toast("ボードに貼りました");
     }
   } catch (e){ toast(writeErrorText(e), true); }
 }

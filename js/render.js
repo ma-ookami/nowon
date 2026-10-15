@@ -98,6 +98,9 @@ function renderToday(){
       : `「${COLORS[lost[0]].name}」のかわりに「${COLORS[got[0]].name}」を選んだ人たちから`;
     $("nbList").replaceChildren(songRow(nb.song, { day:S.day, g:nb.g, blind:true, live:true, tally:S.tally[nb.song.id] }));
   }
+  const bots = S.bots.slice(0, botCount()).filter(b => !list.some(s => s.am && s.am === b.am));
+  $("botCard").hidden = !bots.length;
+  $("botList").replaceChildren(...bots.map(b => songRow(b, { day:S.day, g:p.g, blind:true, bot:true })));
   renderYesterdayMine($("ymToday"));
   renderPlaying();
 }
@@ -168,8 +171,8 @@ function reveal(sid){
 // one song in a playlist: cover (tap to preview when Apple has it), title, buttons to open it in each app,
 // what people felt (listened + colors), and the shelf star.
 //   live: today's playlist (colors can be given)   shelf: a row on my shelf
-function songRow(s, { n, mine, day, g, blind, tally, live, shelf } = {}){
-  if (!shelf) songCtx.set(s.id, { day, g, mine:!!mine });
+function songRow(s, { n, mine, day, g, blind, tally, live, shelf, bot } = {}){
+  if (!shelf) songCtx.set(s.id, { day, g, mine:!!mine, bot:!!bot });
   const covered = blind && isCovered(s, mine);
   const pref = ls.get("app", "");
   const apps = Object.keys(APPS).sort((x, y) => (y === pref) - (x === pref));
@@ -179,10 +182,10 @@ function songRow(s, { n, mine, day, g, blind, tally, live, shelf } = {}){
     ? h("button", { type:"button", class:"s-art play", "data-sid":s.id, "aria-label":covered ? "伏せた曲を試聴" : `${s.t} を試聴`, onclick:play }, art, h("span", { class:"pl", "aria-hidden":"true" }))
     : h("span", { class:"s-art" }, art);
   const isNew = S.fresh && S.fresh.has(s.id) ? h("span", { class:"new", text:"NEW" }) : null;
-  const report = mine || shelf ? null : h("button", { type:"button", class:"s-more", "aria-label":"通報する", title:"通報する", onclick:() => openReport(s, day, g) }, "…");
+  const report = mine || shelf || bot ? null : h("button", { type:"button", class:"s-more", "aria-label":"通報する", title:"通報する", onclick:() => openReport(s, day, g) }, "…");
   const saved = onShelf(s.id);
   const star = h("button", { type:"button", class:"s-star" + (saved ? " on" : ""), "aria-pressed":String(saved),
-    "aria-label":saved ? "たなから出す" : "たなに入れる", title:saved ? "たなから出す" : "たなに入れる", onclick:() => toggleShelf(s) }, saved ? "★" : "☆");
+    "aria-label":saved ? "ボードから外す" : "ボードに貼る", title:saved ? "ボードから外す" : "ボードに貼る", onclick:() => toggleShelf(s) }, "📌");
   if (covered) return h("li", { class:"song covered" },
     n ? h("span", { class:"s-n", text:n }) : null,
     cover,
@@ -201,6 +204,8 @@ function songRow(s, { n, mine, day, g, blind, tally, live, shelf } = {}){
     h("div", { class:"s-meta" },
       h("p", { class:"s-t" }, s.t, mine ? h("span", { class:"you", text:"あなた" }) : null, isNew),
       h("p", { class:"s-a", text:s.a || " " }),
+      bot && COLORS[s.mood] ? h("p", { class:"s-from" }, h("span", { class:"cdot", style:{ background:COLORS[s.mood].hex }, "aria-hidden":"true" }),
+        `「${COLORS[s.mood].name}」の気分から`) : null,
       shelf && s.combo ? h("p", { class:"s-from" }, h("span", { class:"mini-j tiny", style:{ background:jacketBg(s.combo) }, "aria-hidden":"true" }),
         `${dayLabel(s.day)} ・ ${comboNames(s.combo)}`) : null,
       h("div", { class:"s-open" },
@@ -209,7 +214,7 @@ function songRow(s, { n, mine, day, g, blind, tally, live, shelf } = {}){
           title:exactIn(s, app) ? `${APPS[app]}で開く` : `${APPS[app]}で探す`,
           onclick:shelf ? null : () => listened(s.id),
         }, APPS[app].replace(" Music", ""), exactIn(s, app) ? null : h("span", { class:"srch", text:"検索" })))),
-      shelf ? null : moodBlock(s, { tally, mine, live })),
+      shelf || bot ? null : moodBlock(s, { tally, mine, live })),
     h("div", { class:"s-side" }, star, report));
 }
 

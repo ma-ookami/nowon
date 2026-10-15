@@ -6,15 +6,16 @@ const $ = id => document.getElementById(id);
 // The 8 colors. A color's number is its place in this list; keep the count in step with comboOk() in firestore.rules.
 // name: the mood word shown everywhere (the words can be changed freely; saved data uses only the numbers)
 // color: the plain color name, read out by screen readers
+// q: words to search Apple's catalog with, for the songs Now ON picks while a playlist has few people
 const COLORS = [
-  { name:"めらめら",   color:"あか",     hex:"#ef4b4b" },
-  { name:"わくわく",   color:"オレンジ", hex:"#f7923a" },
-  { name:"ごきげん",   color:"きいろ",   hex:"#f4cf3a" },
-  { name:"おだやか",   color:"みどり",   hex:"#45c07a" },
-  { name:"すっきり",   color:"みずいろ", hex:"#5ccbea" },
-  { name:"しんみり",   color:"あお",     hex:"#3d63dd" },
-  { name:"ゆめごこち", color:"むらさき", hex:"#9a62e0" },
-  { name:"ぼんやり",   color:"グレー",   hex:"#8f96a3" },
+  { name:"めらめら",   color:"あか",     hex:"#ef4b4b", q:["ロック 熱い", "パンク", "ラウドロック", "rock anthem", "エモ ロック"] },
+  { name:"わくわく",   color:"オレンジ", hex:"#f7923a", q:["ダンス ポップ", "ファンク", "アップテンポ", "disco", "フェス"] },
+  { name:"ごきげん",   color:"きいろ",   hex:"#f4cf3a", q:["ハッピー ポップ", "スカ", "サマー ソング", "feel good", "ポップ 元気"] },
+  { name:"おだやか",   color:"みどり",   hex:"#45c07a", q:["アコースティック", "フォーク", "ボサノバ", "acoustic", "カフェ"] },
+  { name:"すっきり",   color:"みずいろ", hex:"#5ccbea", q:["爽やか", "ギターポップ", "indie pop", "シティポップ", "朝 爽快"] },
+  { name:"しんみり",   color:"あお",     hex:"#3d63dd", q:["バラード", "切ない", "失恋", "piano ballad", "泣ける"] },
+  { name:"ゆめごこち", color:"むらさき", hex:"#9a62e0", q:["ドリームポップ", "シューゲイザー", "エレクトロニカ", "dream pop", "アンビエント"] },
+  { name:"ぼんやり",   color:"グレー",   hex:"#8f96a3", q:["ローファイ", "チル", "lofi hip hop", "ジャズ 夜", "ambient"] },
 ];
 const GROUP_MAX = 30;        // people per playlist; more people with the same 3 colors get a second one (also in firestore.rules)
 const NEIGHBOR_UNDER = 3;    // a playlist with fewer people than this gets one song from the nearest playlist
@@ -44,6 +45,7 @@ const S = {
   moodOpen:null,            // the song whose color picker is open
   shelf:[], shelfLoaded:false,
   ymine:null,               // yesterday's song of mine and how it was heard
+  bots:[], botsKey:null,    // songs Now ON picks for today's 3 colors while few people are here
   unsubs:[],
 };
 

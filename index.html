@@ -100,6 +100,12 @@
       <p class="empty" id="songEmpty" hidden>まだ曲がありません。<br>最初の1曲を置いてみましょう。</p>
     </div>
 
+    <div class="card bots" id="botCard" hidden>
+      <div class="lhead"><h2>Now ON がえらんだ曲</h2><span class="bot-tag">おまかせ</span></div>
+      <p class="muted small bot-lead">人が集まるまで、今日の3色に合いそうな曲を Now ON が流します。人数には数えていません。</p>
+      <ol class="songs" id="botList"></ol>
+    </div>
+
     <div class="card neighbor" id="nbCard" hidden>
       <div class="nb-head">
         <div class="mini-j" id="nbJacket" aria-hidden="true"></div>
@@ -124,10 +130,10 @@
 
   <!-- my shelf -->
   <section class="screen" id="sShelf" hidden>
-    <div class="shelf-head"><h1 class="cal-title">たな</h1><span class="muted small" id="shelfInfo"></span></div>
-    <p class="muted small shelf-lead">気になった曲の ☆ を押すと、ここに残ります。プレイリストが閉じても消えません。</p>
+    <div class="shelf-head"><h1 class="cal-title">ボード</h1><span class="muted small" id="shelfInfo"></span></div>
+    <p class="muted small shelf-lead">気になった曲の 📌 を押すと、ここに貼っておけます。プレイリストが閉じても消えません。</p>
     <div class="card list-card"><ol class="songs" id="shelfList"></ol>
-      <p class="empty" id="shelfEmpty" hidden>まだ何もありません。<br>今日のプレイリストで、気になった曲の ☆ を押してみましょう。</p></div>
+      <p class="empty" id="shelfEmpty" hidden>まだ何もありません。<br>今日のプレイリストで、気になった曲の 📌 を押してみましょう。</p></div>
   </section>
 
   <!-- a past day -->
@@ -156,7 +162,7 @@
 <nav class="tabs" id="tabs" hidden>
   <a href="#" data-v="today"><span aria-hidden="true">●</span>今日</a>
   <a href="#cal" data-v="cal"><span aria-hidden="true">▦</span>きろく</a>
-  <a href="#shelf" data-v="shelf"><span aria-hidden="true">★</span>たな</a>
+  <a href="#shelf" data-v="shelf"><span aria-hidden="true">📌</span>ボード</a>
 </nav>
 
 <!-- settings -->
