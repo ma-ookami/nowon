@@ -13,6 +13,7 @@ function makeDb(fsdb){
   const docRef = r => ({ id:r.id, path:r.path,
     get: () => rethrow(r.get().then(wrapDoc)),
     set: d => rethrow(r.set(d)),
+    delete: () => rethrow(r.delete()),
     onSnapshot: (next, err) => r.onSnapshot(x => next(wrapDoc(x)), e => err && err(wrapErr(e))) });
   const query = q => ({
     where: (f, op, v) => query(q.where(f, op, v)),

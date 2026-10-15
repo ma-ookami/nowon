@@ -40,6 +40,10 @@ const S = {
   calMonth:null, log:{}, logLoaded:{},
   past:null,                // the day being looked back on
   incoming:null,            // a link shared into the app
+  tally:{}, tallyLoaded:false, // per song: { l: listened, c: [count per color] }
+  moodOpen:null,            // the song whose color picker is open
+  shelf:[], shelfLoaded:false,
+  ymine:null,               // yesterday's song of mine and how it was heard
   unsubs:[],
 };
 

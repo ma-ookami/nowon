@@ -178,6 +178,6 @@ async function togglePreview(am, sid){
   }
 }
 // listened to the end: a hidden song's title comes out
-player.addEventListener("ended", () => { const sid = playingId; playingId = null; renderPlaying(); if (sid) reveal(sid); });
+player.addEventListener("ended", () => { const sid = playingId; playingId = null; renderPlaying(); if (sid){ listened(sid); reveal(sid); } });
 player.addEventListener("timeupdate", () => renderProgress());
 function stopPreview(){ if (playingId){ player.pause(); playingId = null; renderPlaying(); } }

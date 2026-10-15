@@ -14,7 +14,7 @@ async function startDay(){
   stopSubs();
   const day = todayKey();
   Object.assign(S, { day, pick:null, pickLoaded:false, mySid:null, count:null, songs:[], songsLoaded:false,
-    neighbor:null, draft:[], add:{ status:"idle" }, rank:null, fresh:new Set() });
+    neighbor:null, draft:[], add:{ status:"idle" }, rank:null, fresh:new Set(), tally:{}, tallyLoaded:false, ymine:null, moodOpen:null });
   groupWatched = null; neighborFor = null; compared = false;
   render();
   S.mySid = await songIdFor(day, S.uid);
@@ -30,6 +30,8 @@ async function startDay(){
     render();
   }, onSubError));
   loadRank();
+  loadYesterdayMine();
+  watchShelf();
 }
 function cleanPick(d){
   if (!d || !comboOk(d.combo) || !num(d.n) || typeof d.g !== "string") return null;
@@ -51,13 +53,22 @@ function watchGroup(){
     S.songsLoaded = true;
     noteChanges(); render(); maybeNeighbor();
   }, onSubError));
+  S.unsubs.push(S.db.collection(`days/${day}/groups/${p.g}/tally`).onSnapshot(snap => {
+    if (S.day !== day) return;
+    const t = { ...S.tally };
+    snap.docs.forEach(d => { t[d.id] = cleanTally(d.data()); });
+    S.tally = t; S.tallyLoaded = true;
+    noteChanges(); render();
+  }, onSubError));
 }
 
 // ---------- what changed since I last looked: "前回から3人増えて、2曲増えました" and NEW on those songs ----------
 let compared = false;
 function noteChanges(){
-  if (!S.pick || S.count == null || !S.songsLoaded) return;
+  if (!S.pick || S.count == null || !S.songsLoaded || !S.tallyLoaded) return;
   const others = S.songs.filter(s => s.id !== S.mySid);
+  const mineT = mySong() ? S.tally[S.mySid] || cleanTally(null) : null;
+  const colored = t => t ? t.c.reduce((a, b) => a + b, 0) : 0;
   if (!compared){
     if (document.visibilityState !== "visible") return;
     compared = true;
@@ -66,9 +77,17 @@ function noteChanges(){
       const people = Math.max(0, S.count - (num(seen.count) || 0));
       const songs = others.filter(s => !seen.ids.includes(s.id));
       songs.forEach(s => S.fresh.add(s.id));
+      const lines = [];
       const msg = people && songs.length ? `前回から${people}人増えて、${songs.length}曲増えました`
         : people ? `前回から${people}人増えました` : songs.length ? `前回から${songs.length}曲増えました` : "";
-      if (msg) setTimeout(() => toast(msg), 400);
+      if (msg) lines.push(msg);
+      // what came back to my song
+      if (mineT && seen.mine){
+        const heard = mineT.l - (num(seen.mine.l) || 0), cols = colored(mineT) - (num(seen.mine.n) || 0);
+        if (heard > 0) lines.push(`あなたの曲を${heard}人が聴きました`);
+        else if (cols > 0) lines.push(`あなたの曲に${cols}人が色を付けました`);
+      }
+      if (lines.length) setTimeout(() => toast(lines.join("\n")), 400);
     }
   } else if (S.seenIds) {
     // songs that arrive while I am looking are NEW too
@@ -79,7 +98,8 @@ function noteChanges(){
 function saveSeen(){
   if (!compared || document.visibilityState !== "visible") return;
   S.seenIds = S.songs.map(s => s.id);
-  ls.set("seen", { day:S.day, count:S.count, ids:S.seenIds });
+  const t = mySong() ? S.tally[S.mySid] || cleanTally(null) : null;
+  ls.set("seen", { day:S.day, count:S.count, ids:S.seenIds, mine:t ? { l:t.l, n:t.c.reduce((a, b) => a + b, 0) } : null });
 }
 // coming back to the app counts as "opening it again"
 document.addEventListener("visibilitychange", () => {
@@ -115,7 +135,11 @@ async function maybeNeighbor(){
     for (const g of tries){
       const s = await S.db.collection(`days/${day}/groups/${g}/songs`).orderBy("at").limit(1).get();
       const song = s.docs.map(d => cleanSong(d.id, d.data())).find(Boolean);
-      if (song && S.day === day){ S.neighbor = { g, song }; render(); return; }
+      if (song && S.day === day){
+        const t = await S.db.doc(`days/${day}/groups/${g}/tally/${song.id}`).get().catch(() => null);
+        S.tally = { ...S.tally, [song.id]:cleanTally(t && t.exists ? t.data() : null) };
+        S.neighbor = { g, song }; render(); return;
+      }
     }
   } catch {}
 }
@@ -212,13 +236,118 @@ async function loadPast(day){
   S.past = { day, combo:entry.combo, g:entry.g, count:null, songs:[], loaded:false, mySid:null };
   render();
   try {
-    const [mySid, c, s] = await Promise.all([
+    const [mySid, c, s, t] = await Promise.all([
       songIdFor(day, S.uid),
       S.db.doc(`days/${day}/combos/${entry.combo}`).get(),
       S.db.collection(`days/${day}/groups/${entry.g}/songs`).orderBy("at").get(),
+      S.db.collection(`days/${day}/groups/${entry.g}/tally`).get().catch(() => ({ docs:[] })),
     ]);
     if (!S.past || S.past.day !== day) return;
-    Object.assign(S.past, { mySid, count:c.exists ? num(c.data().n) : null, songs:s.docs.map(d => cleanSong(d.id, d.data())).filter(Boolean), loaded:true });
+    const tally = {};
+    t.docs.forEach(d => { tally[d.id] = cleanTally(d.data()); });
+    Object.assign(S.past, { mySid, tally, count:c.exists ? num(c.data().n) : null, songs:s.docs.map(d => cleanSong(d.id, d.data())).filter(Boolean), loaded:true });
   } catch { if (S.past && S.past.day === day) S.past.error = true; }
   render();
+}
+
+// ---------- moods on songs: listened (-1) or one of the 8 colors; the tally per song is what everyone sees ----------
+// my reaction id on a day: a different hash from my song id (the rules check the same)
+const reactIdFor = (day, uid) => sha256Hex("r:" + day + ":" + uid);
+const songCtx = new Map();   // song id -> { day, g, mine } (filled while drawing)
+function myReacts(){ const r = ls.get("reacts", null); return r && r.day === S.day && r.m ? r.m : {}; }
+function setMyReact(sid, c){ ls.set("reacts", { day:S.day, m:{ ...myReacts(), [sid]:c } }); }
+function cleanTally(d){
+  const c = COLORS.map((_, i) => Math.max(0, num(d && d["c" + i]) || 0));
+  return { l:Math.max(0, num(d && d.l) || 0), c };
+}
+let reacting = false;
+async function react(sid, c){
+  const ctx = songCtx.get(sid);
+  if (!ctx || ctx.mine || ctx.day !== S.day || reacting) return;
+  if (todayKey() !== S.day) return;
+  const known = myReacts()[sid];
+  if (known !== undefined && (c === -1 || c === known)) return;
+  reacting = true;
+  const prev = S.tally[sid];
+  try {
+    const rid = sid + "_" + await reactIdFor(S.day, S.uid);
+    const base = `days/${S.day}/groups/${ctx.g}`;
+    let given = c;
+    await S.db.tx(async tx => {
+      const r = await tx.get(`${base}/reacts/${rid}`), t = await tx.get(`${base}/tally/${sid}`);
+      const old = r.exists ? num(r.data().c) : null;
+      given = c;
+      if (old != null && (c === -1 || c === old)){ given = old; return; }
+      const next = t.exists ? { ...t.data() } : {};
+      if (old == null) next.l = (num(next.l) || 0) + 1;
+      if (c >= 0) next["c" + c] = (num(next["c" + c]) || 0) + 1;
+      if (old != null && old >= 0) next["c" + old] = (num(next["c" + old]) || 0) - 1;
+      tx.set(`${base}/reacts/${rid}`, { sid, c });
+      tx.set(`${base}/tally/${sid}`, next);
+    });
+    setMyReact(sid, given);
+    if (c >= 0) toast(`「${COLORS[c].name}」を付けました`);
+  } catch (e){
+    S.tally[sid] = prev;
+    if (c >= 0) toast(writeErrorText(e), true);
+  } finally { reacting = false; S.moodOpen = null; render(); }
+}
+// listened to the end, or opened it in a music app: counts once as "聴いた"
+function listened(sid){
+  const ctx = songCtx.get(sid);
+  if (ctx && !ctx.mine && ctx.day === S.day && myReacts()[sid] === undefined) react(sid, -1);
+}
+
+// ---------- my shelf: songs to keep, from any day ----------
+let shelfUnsub = null;
+function watchShelf(){
+  if (shelfUnsub) return;
+  shelfUnsub = S.db.collection(`users/${S.uid}/shelf`).orderBy("at", "desc").limit(300).onSnapshot(snap => {
+    S.shelf = snap.docs.map(d => {
+      const x = d.data(), s = cleanSong(d.id, x);
+      return s && { ...s, day:str(x.day, 10), combo:comboOk(x.combo) ? x.combo : "" };
+    }).filter(Boolean);
+    S.shelfLoaded = true;
+    render();
+  }, () => { S.shelfLoaded = true; render(); });
+}
+const onShelf = sid => S.shelf.some(s => s.id === sid);
+async function toggleShelf(s){
+  const ctx = songCtx.get(s.id) || {};
+  const ref = S.db.doc(`users/${S.uid}/shelf/${s.id}`);
+  try {
+    if (onShelf(s.id)){
+      S.shelf = S.shelf.filter(x => x.id !== s.id); render();
+      await ref.delete();
+      toast("たなから出しました");
+    } else {
+      const day = ctx.day || s.day, combo = ctx.g ? groupCombo(ctx.g) : s.combo;
+      await ref.set({ t:s.t, a:s.a, am:s.am, sp:s.sp, yt:s.yt, art:s.art, at:Date.now(), day, combo });
+      toast("たなに入れました");
+    }
+  } catch (e){ toast(writeErrorText(e), true); }
+}
+
+// ---------- yesterday's song of mine: how it was heard (final after 5:00, so it is kept) ----------
+async function loadYesterdayMine(){
+  const y = addDays(S.day, -1);
+  const cached = ls.get("ymine", null);
+  if (cached && cached.day === y){ S.ymine = cached.v; render(); return; }
+  try {
+    const log = await S.db.doc(`users/${S.uid}/log/${y}`).get();
+    const g = log.exists ? str(log.data().g, 20) : "";
+    let v = null;
+    if (g){
+      const sid = await songIdFor(y, S.uid);
+      const [song, t] = await Promise.all([
+        S.db.doc(`days/${y}/groups/${g}/songs/${sid}`).get(),
+        S.db.doc(`days/${y}/groups/${g}/tally/${sid}`).get(),
+      ]);
+      const s = song.exists ? cleanSong(sid, song.data()) : null;
+      if (s) v = { song:s, g, tally:cleanTally(t.exists ? t.data() : null) };
+    }
+    S.ymine = v;
+    ls.set("ymine", { day:y, v });
+    render();
+  } catch {}
 }

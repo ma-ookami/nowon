@@ -10,6 +10,10 @@ rules_version = '2';
 // - 曲を読めるのは、その日に3色を選んだ人のうち、2色以上が同じプレイリストの人(自分のと「となり」)
 // - 保存できる曲は、Spotify・Apple Music・YouTube Music の曲のIDと、曲名・アーティスト・ジャケット画像だけ。
 //   ふつうのURLは保存できない
+// - 曲には、聴いた人が気分の色を1つ付けられる(あとから変えられる)。自分の曲には付けられない。
+//   だれが何色を付けたか(reacts)は本人しか読めず、曲ごとの合計(tally)だけが見える。
+//   合計は、反応と同じ書き込みの中で、ちょうどその分だけしか増減できない
+// - 棚(users/<uid>/shelf)は本人だけ。気になった曲をとっておける
 // - banned/<利用者ID> を Firebase の画面で作ると、その人は3色を選ぶことも曲を置くこともできなくなる
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -44,6 +48,37 @@ service cloud.firestore {
     function pickMadeNow(day, c) {
       return !exists(pickPath(day)) && existsAfter(pickPath(day)) && getAfter(pickPath(day)).data.combo == c;
     }
+    function songPath(day, g, sid) { return /databases/$(database)/documents/days/$(day)/groups/$(g)/songs/$(sid); }
+    function reactPath(day, g, rid) { return /databases/$(database)/documents/days/$(day)/groups/$(g)/reacts/$(rid); }
+    function tallyPath(day, g, sid) { return /databases/$(database)/documents/days/$(day)/groups/$(g)/tally/$(sid); }
+    // my reaction id on a day (a different hash from my song id, so the two can not be matched up)
+    function rh(day) { return hashing.sha256(('r:' + day + ':' + me()).toUtf8()).toHexString().lower(); }
+    // I chose 3 colors that day, and this playlist is mine or one color away (the same test as reading songs)
+    function canRead(day, g) {
+      return signedIn() && groupOk(g) && exists(pickPath(day))
+        && near(get(pickPath(day)).data.combo, g.split('_')[0]);
+    }
+    // a tally value after this write equals the value before plus d
+    function inc(t, k, d) { return getAfter(t).data.get(k, 0) == (exists(t) ? get(t).data.get(k, 0) : 0) + d; }
+    // the song's tally changes by exactly my reaction, in this same write:
+    //   new reaction: l (listened) +1, and +1 on its color unless it is -1 (listened, no color yet)
+    //   changed color: +1 on the new color, -1 on the old one (if there was one). It can not go back to -1
+    function tallyMovedNow(day, g, sid) {
+      let r = reactPath(day, g, sid + '_' + rh(day));
+      let t = tallyPath(day, g, sid);
+      let keys = exists(t) ? getAfter(t).data.diff(get(t).data).affectedKeys() : getAfter(t).data.keys().toSet();
+      let c = getAfter(r).data.c;
+      let k = 'c' + string(c);
+      return existsAfter(r) && existsAfter(t) && getAfter(r).data.sid == sid
+        && (!exists(r)
+          ? (c == -1 ? keys.hasOnly(['l']) && inc(t, 'l', 1)
+                     : keys.hasOnly(['l', k]) && inc(t, 'l', 1) && inc(t, k, 1))
+          : (c != -1 && c != get(r).data.c
+             && (get(r).data.c == -1
+               ? keys.hasOnly([k]) && inc(t, k, 1)
+               : keys.hasOnly([k, 'c' + string(get(r).data.c)]) && inc(t, k, 1) && inc(t, 'c' + string(get(r).data.c), -1))));
+    }
+
     // two combos share at least 2 colors (the same playlist's combo shares all 3)
     function near(a, b) { return a.split('-').toSet().intersection(b.split('-').toSet()).size() >= 2; }
 
@@ -60,8 +95,10 @@ service cloud.firestore {
         && recentMs(d.at);
     }
     function validSong(d) {
-      return d.keys().hasOnly(['t', 'a', 'am', 'sp', 'yt', 'art', 'at'])
-        && isText(d.t, 1, 200)
+      return d.keys().hasOnly(['t', 'a', 'am', 'sp', 'yt', 'art', 'at']) && songFields(d);
+    }
+    function songFields(d) {
+      return isText(d.t, 1, 200)
         && isText(d.a, 0, 200)
         && d.am is string && d.am.matches('^([0-9]{1,15})?$')
         && d.sp is string && d.sp.matches('^([A-Za-z0-9]{22})?$')
@@ -70,6 +107,15 @@ service cloud.firestore {
         && isText(d.art, 0, 400)
         && d.art.matches('^(https://(is[0-9]+-ssl[.]mzstatic[.]com|i[.]scdn[.]co|image-cdn-[a-z0-9-]+[.]spotifycdn[.]com|i[.]ytimg[.]com)/[A-Za-z0-9/._%-]+)?$')
         && recentMs(d.at);
+    }
+
+    function validReact(day, g, rid, d) {
+      return d.keys().hasOnly(['sid', 'c'])
+        && d.sid is string && d.sid.matches('^[0-9a-f]{64}$')
+        && rid == d.sid + '_' + rh(day)
+        && d.c is int && d.c >= -1 && d.c <= 7
+        && d.sid != sha(day)
+        && exists(songPath(day, g, d.sid));
     }
 
     match /days/{day} {
@@ -102,6 +148,25 @@ service cloud.firestore {
           && existsAfter(ownerPath(day, sid));
       }
 
+      // my reaction to a song: only I can read it (to know what I gave)
+      match /groups/{g}/reacts/{rid} {
+        allow get: if signedIn() && rid.split('_').size() == 2 && rid.split('_')[1] == rh(day);
+        allow create: if signedIn() && isToday(day) && notBanned() && canRead(day, g)
+          && validReact(day, g, rid, request.resource.data)
+          && tallyMovedNow(day, g, request.resource.data.sid);
+        allow update: if signedIn() && isToday(day) && notBanned() && canRead(day, g)
+          && validReact(day, g, rid, request.resource.data)
+          && request.resource.data.sid == resource.data.sid
+          && tallyMovedNow(day, g, request.resource.data.sid);
+      }
+      // per song: l = people who listened (or gave a color), c0..c7 = how many gave each color
+      match /groups/{g}/tally/{sid} {
+        allow read: if canRead(day, g);
+        allow create, update: if signedIn() && isToday(day) && canRead(day, g)
+          && request.resource.data.keys().hasOnly(['l', 'c0', 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7'])
+          && tallyMovedNow(day, g, sid);
+      }
+
       // who put each song: nobody can read it from the app (only from the Firebase console)
       match /owners/{sid} {
         allow create: if signedIn() && isToday(day) && sid == sha(day)
@@ -117,6 +182,16 @@ service cloud.firestore {
         && request.resource.data.day == day
         && pickMadeNow(day, request.resource.data.combo)
         && getAfter(pickPath(day)).data.g == request.resource.data.g;
+    }
+
+    // my shelf: songs I want to keep, from any day
+    match /users/{uid}/shelf/{sid} {
+      allow read, delete: if signedIn() && uid == me();
+      allow create: if signedIn() && uid == me() && sid.matches('^[0-9A-Za-z_-]{1,64}$')
+        && request.resource.data.keys().hasOnly(['t', 'a', 'am', 'sp', 'yt', 'art', 'at', 'day', 'combo'])
+        && songFields(request.resource.data)
+        && isText(request.resource.data.day, 10, 10)
+        && comboOk(request.resource.data.combo);
     }
 
     // reports of a song: written from the app, read only from the Firebase console. Once per person per song
