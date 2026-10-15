@@ -14,8 +14,8 @@ async function startDay(){
   stopSubs();
   const day = todayKey();
   Object.assign(S, { day, pick:null, pickLoaded:false, mySid:null, count:null, songs:[], songsLoaded:false,
-    neighbor:null, draft:[], add:{ status:"idle" }, rank:null });
-  groupWatched = null; neighborFor = null;
+    neighbor:null, draft:[], add:{ status:"idle" }, rank:null, fresh:new Set() });
+  groupWatched = null; neighborFor = null; compared = false;
   render();
   S.mySid = await songIdFor(day, S.uid);
   if (S.day !== day) return;
@@ -43,15 +43,48 @@ function watchGroup(){
   S.unsubs.push(S.db.doc(`days/${day}/combos/${p.combo}`).onSnapshot(snap => {
     if (S.day !== day) return;
     S.count = snap.exists ? num(snap.data().n) : null;
-    render(); maybeNeighbor();
+    noteChanges(); render(); maybeNeighbor();
   }, onSubError));
   S.unsubs.push(S.db.collection(`days/${day}/groups/${p.g}/songs`).orderBy("at").onSnapshot(snap => {
     if (S.day !== day) return;
     S.songs = snap.docs.map(d => cleanSong(d.id, d.data())).filter(Boolean);
     S.songsLoaded = true;
-    render(); maybeNeighbor();
+    noteChanges(); render(); maybeNeighbor();
   }, onSubError));
 }
+
+// ---------- what changed since I last looked: "前回から3人増えて、2曲増えました" and NEW on those songs ----------
+let compared = false;
+function noteChanges(){
+  if (!S.pick || S.count == null || !S.songsLoaded) return;
+  const others = S.songs.filter(s => s.id !== S.mySid);
+  if (!compared){
+    if (document.visibilityState !== "visible") return;
+    compared = true;
+    const seen = ls.get("seen", null);
+    if (seen && seen.day === S.day && Array.isArray(seen.ids)){
+      const people = Math.max(0, S.count - (num(seen.count) || 0));
+      const songs = others.filter(s => !seen.ids.includes(s.id));
+      songs.forEach(s => S.fresh.add(s.id));
+      const msg = people && songs.length ? `前回から${people}人増えて、${songs.length}曲増えました`
+        : people ? `前回から${people}人増えました` : songs.length ? `前回から${songs.length}曲増えました` : "";
+      if (msg) setTimeout(() => toast(msg), 400);
+    }
+  } else if (S.seenIds) {
+    // songs that arrive while I am looking are NEW too
+    others.forEach(s => { if (!S.seenIds.includes(s.id)) S.fresh.add(s.id); });
+  }
+  saveSeen();
+}
+function saveSeen(){
+  if (!compared || document.visibilityState !== "visible") return;
+  S.seenIds = S.songs.map(s => s.id);
+  ls.set("seen", { day:S.day, count:S.count, ids:S.seenIds });
+}
+// coming back to the app counts as "opening it again"
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && S.pick){ compared = false; noteChanges(); render(); }
+});
 
 // people in my playlist: playlists fill up 30 at a time
 function groupSize(){

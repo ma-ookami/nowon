@@ -38,7 +38,7 @@ function renderPick(){
   $("pickDate").textContent = dayLabel(S.day) + " の気分";
   const box = $("swatches");
   if (!box.children.length) COLORS.forEach((c, i) => box.append(
-    h("button", { type:"button", class:"sw", "data-i":i, role:"checkbox", "aria-checked":"false", style:{ "--c":c.hex } },
+    h("button", { type:"button", class:"sw", "data-i":i, role:"checkbox", "aria-checked":"false", "aria-label":`${c.name}(${c.color})`, style:{ "--c":c.hex } },
       h("span", { class:"dot", "aria-hidden":"true" }), h("span", { class:"nm", text:c.name }))));
   const full = S.draft.length === 3;
   box.querySelectorAll(".sw").forEach(b => {
@@ -82,7 +82,7 @@ function renderToday(){
   $("addCard").hidden = !!mine || !S.songsLoaded;
   if (!mine) renderAdd();
   $("songInfo").textContent = S.songs.length ? `${S.songs.length}曲` : "";
-  $("songList").replaceChildren(...list.map((s, i) => songRow(s, { n:i + 1, mine:s.id === S.mySid, day:S.day, g:p.g })));
+  $("songList").replaceChildren(...list.map((s, i) => songRow(s, { n:i + 1, mine:s.id === S.mySid, day:S.day, g:p.g, blind:true })));
   $("songEmpty").hidden = !S.songsLoaded || list.length > 0;
 
   const nb = S.neighbor && size != null && size < NEIGHBOR_UNDER && !hidden.has(S.neighbor.song.id) ? S.neighbor : null;
@@ -92,8 +92,8 @@ function renderToday(){
     setJacket($("nbJacket"), other);
     const lost = comboIds(p.combo).filter(i => !comboIds(other).includes(i)), got = comboIds(other).filter(i => !comboIds(p.combo).includes(i));
     $("nbWhy").textContent = other === p.combo ? "同じ3色の、もうひとつのプレイリストから"
-      : `${COLORS[lost[0]].name}のかわりに${COLORS[got[0]].name}を選んだ人たちから`;
-    $("nbList").replaceChildren(songRow(nb.song, { day:S.day, g:nb.g }));
+      : `「${COLORS[lost[0]].name}」のかわりに「${COLORS[got[0]].name}」を選んだ人たちから`;
+    $("nbList").replaceChildren(songRow(nb.song, { day:S.day, g:nb.g, blind:true }));
   }
   renderPlaying();
 }
@@ -128,31 +128,67 @@ function candRow(s, onPick){
     h("span", { class:"c-go", text:"置く", "aria-hidden":"true" }));
 }
 
+// ---------- 伏せて聴く: other people's songs start with the title hidden; 30 seconds of listening reveals it ----------
+const revealed = new Set(ls.get("revealed", []));
+let justRevealed = null;
+const blindOn = () => ls.get("blind", true) !== false;
+const isCovered = (s, mine) => blindOn() && !mine && !!s.am && !revealed.has(s.id);
+function reveal(sid){
+  if (revealed.has(sid)) return;
+  revealed.add(sid); ls.set("revealed", [...revealed].slice(-500));
+  justRevealed = sid;
+  render();
+  setTimeout(() => { if (justRevealed === sid) justRevealed = null; }, 1500);
+}
+
 // one song in a playlist: cover (tap to preview when Apple has it), title, and buttons to open it in each app
-function songRow(s, { n, mine, day, g } = {}){
+function songRow(s, { n, mine, day, g, blind } = {}){
+  const covered = blind && isCovered(s, mine);
   const pref = ls.get("app", "");
   const apps = Object.keys(APPS).sort((x, y) => (y === pref) - (x === pref));
   const art = s.art ? h("img", { src:s.art, alt:"", loading:"lazy" }) : h("span", { class:"ph", text:"♪" });
+  const play = () => togglePreview(s.am, s.id);
   const cover = s.am
-    ? h("button", { type:"button", class:"s-art play", "data-am":s.am, "aria-label":`${s.t} を試聴`, onclick:() => togglePreview(s.am) }, art, h("span", { class:"pl", "aria-hidden":"true" }))
+    ? h("button", { type:"button", class:"s-art play", "data-sid":s.id, "aria-label":covered ? "伏せた曲を試聴" : `${s.t} を試聴`, onclick:play }, art, h("span", { class:"pl", "aria-hidden":"true" }))
     : h("span", { class:"s-art" }, art);
-  return h("li", { class:"song" + (mine ? " mine" : "") },
+  const isNew = S.fresh && S.fresh.has(s.id) ? h("span", { class:"new", text:"NEW" }) : null;
+  const report = mine ? null : h("button", { type:"button", class:"s-more", "aria-label":"通報する", title:"通報する", onclick:() => openReport(s, day, g) }, "…");
+  if (covered) return h("li", { class:"song covered" },
     n ? h("span", { class:"s-n", text:n }) : null,
     cover,
     h("div", { class:"s-meta" },
-      h("p", { class:"s-t" }, s.t, mine ? h("span", { class:"you", text:"あなた" }) : null),
+      h("p", { class:"s-t" }, "? ? ?", isNew),
+      h("p", { class:"s-a", text:"30秒聴くと、曲名が出ます" }),
+      h("div", { class:"prog", "data-sid":s.id, "aria-hidden":"true" }, h("span")),
+      h("div", { class:"s-open" },
+        h("button", { type:"button", class:"open pref", "data-sid":s.id, "data-label":"▶ 伏せて聴く", onclick:play }, "▶ 伏せて聴く"),
+        h("button", { type:"button", class:"open", onclick:() => reveal(s.id) }, "答えを見る"))),
+    report);
+  return h("li", { class:"song" + (mine ? " mine" : "") + (s.id === justRevealed ? " just" : "") },
+    n ? h("span", { class:"s-n", text:n }) : null,
+    cover,
+    h("div", { class:"s-meta" },
+      h("p", { class:"s-t" }, s.t, mine ? h("span", { class:"you", text:"あなた" }) : null, isNew),
       h("p", { class:"s-a", text:s.a || " " }),
       h("div", { class:"s-open" }, ...apps.map(app => h("a", {
         class:"open" + (app === pref ? " pref" : ""), href:openUrl(s, app), target:"_blank", rel:"noopener",
         title:exactIn(s, app) ? `${APPS[app]}で開く` : `${APPS[app]}で探す`,
       }, APPS[app].replace(" Music", ""), exactIn(s, app) ? null : h("span", { class:"srch", text:"検索" }))))),
-    mine ? null : h("button", { type:"button", class:"s-more", "aria-label":"通報する", title:"通報する", onclick:() => openReport(s, day, g) }, "…"));
+    report);
 }
 function renderPlaying(){
-  document.querySelectorAll(".s-art.play").forEach(b => {
-    const on = b.dataset.am === playingId;
-    b.classList.toggle("on", on);
-    b.setAttribute("aria-pressed", String(on));
+  document.querySelectorAll("[data-sid]").forEach(el => {
+    const on = el.dataset.sid === playingId;
+    el.classList.toggle("on", on);
+    if (el.classList.contains("s-art")) el.setAttribute("aria-pressed", String(on));
+    if (el.dataset.label) el.textContent = on ? "■ とめる" : el.dataset.label;
+  });
+  renderProgress();
+}
+function renderProgress(){
+  document.querySelectorAll(".prog").forEach(p => {
+    const on = p.dataset.sid === playingId && player.duration > 0;
+    p.firstChild.style.width = on ? Math.min(100, player.currentTime / player.duration * 100) + "%" : "0";
   });
 }
 

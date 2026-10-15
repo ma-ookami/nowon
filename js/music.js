@@ -162,20 +162,22 @@ const exactIn = (s, app) => app === "spotify" ? !!s.sp : app === "apple" ? !!s.a
 // ---------- 30-second previews (Apple only) ----------
 const player = new Audio();
 player.preload = "none";
-let playingId = null;
-async function togglePreview(am){
-  if (playingId === am){ player.pause(); playingId = null; renderPlaying(); return; }
-  playingId = am; renderPlaying();
+let playingId = null;   // the song (its id in the playlist) being previewed
+async function togglePreview(am, sid){
+  if (playingId === sid){ player.pause(); playingId = null; renderPlaying(); return; }
+  playingId = sid; renderPlaying();
   try {
     if (!preview.has(am)) await itunesLookup(am);
     const url = preview.get(am);
     if (!url){ playingId = null; renderPlaying(); return toast("この曲は試聴できません", true); }
-    if (playingId !== am) return;
+    if (playingId !== sid) return;
     player.src = url;
     await player.play();
   } catch {
-    if (playingId === am){ playingId = null; renderPlaying(); toast("試聴できませんでした", true); }
+    if (playingId === sid){ playingId = null; renderPlaying(); toast("試聴できませんでした", true); }
   }
 }
-player.addEventListener("ended", () => { playingId = null; renderPlaying(); });
+// listened to the end: a hidden song's title comes out
+player.addEventListener("ended", () => { const sid = playingId; playingId = null; renderPlaying(); if (sid) reveal(sid); });
+player.addEventListener("timeupdate", () => renderProgress());
 function stopPreview(){ if (playingId){ player.pause(); playingId = null; renderPlaying(); } }

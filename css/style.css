@@ -216,3 +216,16 @@ h2{font-family:var(--f-display);font-size:17px;text-wrap:balance}
 .offline{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:50;padding:7px 14px;border-radius:999px;background:var(--danger);color:#fff;font-size:13px;font-weight:700}
 .updating{position:fixed;inset:0;z-index:70;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center}
 @media (prefers-reduced-motion: reduce){ *{transition:none!important;animation-duration:.01ms!important} }
+
+/* 伏せて聴く (hidden title until 30 seconds of listening) and NEW */
+.seg.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.song.covered .s-art img{filter:blur(9px) saturate(1.2);transform:scale(1.25)}
+.song.covered .s-art .pl{opacity:1;background:rgba(0,0,0,.18)}
+.song.covered .s-t{letter-spacing:.2em}
+.song.covered .s-open button.open{cursor:pointer;font-family:inherit;background:none}
+.song.covered .s-open button.open.pref{background:var(--acc)}
+.prog{height:4px;border-radius:2px;background:var(--surface-2);margin-top:8px;overflow:hidden}
+.prog span{display:block;height:100%;width:0;background:var(--glow);transition:width .25s linear}
+.song.just .s-meta{animation:reveal .7s ease-out}
+@keyframes reveal{from{opacity:0;transform:translateY(6px);filter:blur(4px)}to{opacity:1;transform:none;filter:none}}
+.new{display:inline-block;margin-left:6px;font-size:10px;font-weight:800;letter-spacing:.04em;padding:1px 7px;border-radius:999px;color:#fff;background:var(--glow);vertical-align:2px}

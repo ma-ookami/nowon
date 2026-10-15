@@ -105,7 +105,13 @@ $("setBtn").addEventListener("click", () => { renderSettings(); openSheet("shSet
 function renderSettings(){
   const a = ls.get("app", "");
   document.querySelectorAll("#appPick button").forEach(b => { const on = b.dataset.a === a; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); });
+  const bl = blindOn() ? "on" : "off";
+  document.querySelectorAll("#blindPick button").forEach(b => { const on = b.dataset.b === bl; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); });
 }
+$("blindPick").addEventListener("click", e => {
+  const b = e.target.closest("button[data-b]"); if (!b) return;
+  ls.set("blind", b.dataset.b === "on"); renderSettings(); render(); toast("保存しました");
+});
 $("appPick").addEventListener("click", e => {
   const b = e.target.closest("button[data-a]"); if (!b) return;
   ls.set("app", b.dataset.a); renderSettings(); render(); toast("保存しました");

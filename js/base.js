@@ -4,15 +4,17 @@
 const $ = id => document.getElementById(id);
 
 // The 8 colors. A color's number is its place in this list; keep the count in step with comboOk() in firestore.rules.
+// name: the mood word shown everywhere (the words can be changed freely; saved data uses only the numbers)
+// color: the plain color name, read out by screen readers
 const COLORS = [
-  { name:"あか",     hex:"#ef4b4b" },
-  { name:"オレンジ", hex:"#f7923a" },
-  { name:"きいろ",   hex:"#f4cf3a" },
-  { name:"みどり",   hex:"#45c07a" },
-  { name:"みずいろ", hex:"#5ccbea" },
-  { name:"あお",     hex:"#3d63dd" },
-  { name:"むらさき", hex:"#9a62e0" },
-  { name:"グレー",   hex:"#8f96a3" },
+  { name:"めらめら",   color:"あか",     hex:"#ef4b4b" },
+  { name:"わくわく",   color:"オレンジ", hex:"#f7923a" },
+  { name:"ごきげん",   color:"きいろ",   hex:"#f4cf3a" },
+  { name:"おだやか",   color:"みどり",   hex:"#45c07a" },
+  { name:"すっきり",   color:"みずいろ", hex:"#5ccbea" },
+  { name:"しんみり",   color:"あお",     hex:"#3d63dd" },
+  { name:"ゆめごこち", color:"むらさき", hex:"#9a62e0" },
+  { name:"ぼんやり",   color:"グレー",   hex:"#8f96a3" },
 ];
 const GROUP_MAX = 30;        // people per playlist; more people with the same 3 colors get a second one (also in firestore.rules)
 const NEIGHBOR_UNDER = 3;    // a playlist with fewer people than this gets one song from the nearest playlist
