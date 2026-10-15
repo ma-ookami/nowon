@@ -1,0 +1,134 @@
+rules_version = '2';
+
+// Now ON のデータを守るルール。
+// - 1日は日本時間の朝5時から次の朝5時まで。書けるのは「今日」の分だけ(前後10分の時計のずれは許す)
+// - 3色(picks)は1人1日1回、あとから変えられない。だれが何色を選んだかは本人しか読めない
+// - 「この3色を選んだ人数」(combos)は、3色を選んだときに同じ書き込みの中で1だけ増やせる
+// - 30人ごとに1つのプレイリスト(groups/<3色>_<番号>)。自分のプレイリストにだけ、1人1曲置ける。消す・変えるはできない
+// - 曲のIDは「日付:利用者ID」のハッシュなので、日をまたいで同じ人の曲をたどれない
+//   (だれの曲かは owners に残り、運営だけが Firebase の画面で見られる。通報の対応用)
+// - 曲を読めるのは、その日に3色を選んだ人のうち、2色以上が同じプレイリストの人(自分のと「となり」)
+// - 保存できる曲は、Spotify・Apple Music・YouTube Music の曲のIDと、曲名・アーティスト・ジャケット画像だけ。
+//   ふつうのURLは保存できない
+// - banned/<利用者ID> を Firebase の画面で作ると、その人は3色を選ぶことも曲を置くこともできなくなる
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function nowMs() { return request.time.toMillis(); }
+    // a time the phone stamped: within 15 minutes of now
+    function recentMs(v) { return v is int && v <= nowMs() + 900000 && v >= nowMs() - 900000; }
+    function isText(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
+    function p2(n) { return n < 10 ? '0' + string(n) : string(n); }
+    function dkey(t) { return string(t.year()) + '-' + p2(t.month()) + '-' + p2(t.day()); }
+    // the day changes at 5:00 in Japan (UTC+9), so a day is the calendar date at UTC+4
+    function dayAt(mins) { return dkey(request.time + duration.value(240 + mins, 'm')); }
+    function isToday(day) { return day == dayAt(0) || day == dayAt(-10) || day == dayAt(10); }
+    function notBanned() { return !exists(/databases/$(database)/documents/banned/$(me())); }
+    // 3 different colors out of 8, smallest first: "1-4-6" (COLORS in js/base.js)
+    function comboOk(c) {
+      return c is string && c.matches('^[0-7]-[0-7]-[0-7]$')
+        && int(c.split('-')[0]) < int(c.split('-')[1])
+        && int(c.split('-')[1]) < int(c.split('-')[2]);
+    }
+    // the playlist a person joins: 30 per playlist (GROUP_MAX in js/base.js)
+    function groupFor(c, n) { return c + '_' + string(int(math.floor(float(n - 1) / 30.0))); }
+    function groupOk(g) { return g is string && g.matches('^[0-7]-[0-7]-[0-7]_[0-9]{1,5}$'); }
+    function sha(day) { return hashing.sha256((day + ':' + me()).toUtf8()).toHexString().lower(); }
+    function pickPath(day) { return /databases/$(database)/documents/days/$(day)/picks/$(me()); }
+    function comboPath(day, c) { return /databases/$(database)/documents/days/$(day)/combos/$(c); }
+    function ownerPath(day, sid) { return /databases/$(database)/documents/days/$(day)/owners/$(sid); }
+    // this write (or batch) is the one that makes my pick for the day, with these colors
+    function pickMadeNow(day, c) {
+      return !exists(pickPath(day)) && existsAfter(pickPath(day)) && getAfter(pickPath(day)).data.combo == c;
+    }
+    // two combos share at least 2 colors (the same playlist's combo shares all 3)
+    function near(a, b) { return a.split('-').toSet().intersection(b.split('-').toSet()).size() >= 2; }
+
+    // ---------- shapes ----------
+    function validPick(day, d) {
+      return d.keys().hasOnly(['combo', 'n', 'g', 'at'])
+        && comboOk(d.combo)
+        && d.n is int && d.n >= 1
+        // the count went up by exactly one in this same write, and my number is the new count
+        && existsAfter(comboPath(day, d.combo))
+        && getAfter(comboPath(day, d.combo)).data.n == d.n
+        && (exists(comboPath(day, d.combo)) ? get(comboPath(day, d.combo)).data.n == d.n - 1 : d.n == 1)
+        && d.g == groupFor(d.combo, d.n)
+        && recentMs(d.at);
+    }
+    function validSong(d) {
+      return d.keys().hasOnly(['t', 'a', 'am', 'sp', 'yt', 'art', 'at'])
+        && isText(d.t, 1, 200)
+        && isText(d.a, 0, 200)
+        && d.am is string && d.am.matches('^([0-9]{1,15})?$')
+        && d.sp is string && d.sp.matches('^([A-Za-z0-9]{22})?$')
+        && d.yt is string && d.yt.matches('^([A-Za-z0-9_-]{11})?$')
+        && (d.am != '' || d.sp != '' || d.yt != '')
+        && isText(d.art, 0, 400)
+        && d.art.matches('^(https://(is[0-9]+-ssl[.]mzstatic[.]com|i[.]scdn[.]co|image-cdn-[a-z0-9-]+[.]spotifycdn[.]com|i[.]ytimg[.]com)/[A-Za-z0-9/._%-]+)?$')
+        && recentMs(d.at);
+    }
+
+    match /days/{day} {
+      // how many chose each 3 colors that day (also used for "yesterday's most chosen")
+      match /combos/{c} {
+        allow read: if signedIn();
+        allow create: if signedIn() && isToday(day) && comboOk(c)
+          && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == 1
+          && pickMadeNow(day, c);
+        allow update: if signedIn() && isToday(day)
+          && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == resource.data.n + 1
+          && pickMadeNow(day, c);
+      }
+
+      // my 3 colors for the day: once, never changed
+      match /picks/{uid} {
+        allow get: if signedIn() && uid == me();
+        allow create: if signedIn() && uid == me() && isToday(day) && notBanned()
+          && validPick(day, request.resource.data);
+      }
+
+      match /groups/{g}/songs/{sid} {
+        allow read: if signedIn() && groupOk(g) && exists(pickPath(day))
+          && near(get(pickPath(day)).data.combo, g.split('_')[0]);
+        // one song per person per day, in their own playlist, together with its owners entry
+        allow create: if signedIn() && isToday(day) && notBanned()
+          && sid == sha(day)
+          && exists(pickPath(day)) && get(pickPath(day)).data.g == g
+          && validSong(request.resource.data)
+          && existsAfter(ownerPath(day, sid));
+      }
+
+      // who put each song: nobody can read it from the app (only from the Firebase console)
+      match /owners/{sid} {
+        allow create: if signedIn() && isToday(day) && sid == sha(day)
+          && request.resource.data.keys().hasOnly(['uid']) && request.resource.data.uid == me();
+      }
+    }
+
+    // my own record for the calendar, written together with the day's pick
+    match /users/{uid}/log/{day} {
+      allow read: if signedIn() && uid == me();
+      allow create: if signedIn() && uid == me() && isToday(day)
+        && request.resource.data.keys().hasOnly(['combo', 'g', 'day'])
+        && request.resource.data.day == day
+        && pickMadeNow(day, request.resource.data.combo)
+        && getAfter(pickPath(day)).data.g == request.resource.data.g;
+    }
+
+    // reports of a song: written from the app, read only from the Firebase console. Once per person per song
+    match /reports/{rid} {
+      allow create: if signedIn() && rid == request.resource.data.sid + '_' + me()
+        && request.resource.data.keys().hasOnly(['day', 'g', 'sid', 'why', 'by', 'at'])
+        && isText(request.resource.data.day, 10, 10)
+        && groupOk(request.resource.data.g)
+        && isText(request.resource.data.sid, 64, 64)
+        && request.resource.data.why in ['notsong', 'bad', 'other']
+        && request.resource.data.by == me()
+        && recentMs(request.resource.data.at);
+    }
+  }
+}

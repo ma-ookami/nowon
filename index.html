@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#121218">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Now ON">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<meta name="description" content="今日の気分を3色で。同じ3色を選んだ知らない人たちと、その日だけのプレイリストをつくる。">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Now ON</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="logo" href="#" aria-label="Now ON 今日のプレイリスト">Now<span class="on">ON</span></a>
+    <button class="icon-btn" id="setBtn" aria-label="設定" title="設定">⚙</button>
+  </header>
+
+  <section class="screen" id="sLoading">
+    <div class="spin" aria-hidden="true"></div>
+    <p class="muted center">読み込み中…</p>
+    <div id="slowNote" hidden class="notice">読み込みに時間がかかっています。<button class="linkbtn" data-reload>再読み込みする</button></div>
+  </section>
+
+  <section class="screen" id="sError" hidden>
+    <p class="big-q">あれ?</p>
+    <div class="notice err" id="errMsg"></div>
+    <button class="btn primary" data-reload>再読み込み</button>
+  </section>
+
+  <!-- choose today's 3 colors -->
+  <section class="screen" id="sPick" hidden>
+    <div class="pick-head">
+      <p class="eyebrow" id="pickDate"></p>
+      <h1 class="title">今日の気分を、<br>3色で。</h1>
+      <p class="muted">選ぶ順番は関係ありません。同じ3色を選んだ人と、今日だけのプレイリストをつくります。</p>
+    </div>
+    <div class="pick-stage">
+      <div class="jacket preview" id="pickJacket" aria-hidden="true"><div class="dots" id="pickDots"></div></div>
+      <div class="swatches" id="swatches" role="group" aria-label="色(3つ選ぶ)"></div>
+    </div>
+    <p class="pick-hint" id="pickHint" aria-live="polite"></p>
+    <button class="btn primary big" id="pickGo" disabled>この3色にする</button>
+    <div class="notice" id="incomingNote" hidden>共有された曲は、3色を選んだあとに追加できます</div>
+    <div class="card rank" id="rankCard" hidden>
+      <h2>昨日いちばん選ばれた3色</h2>
+      <ol class="rank-list" id="rankList"></ol>
+    </div>
+    <ol class="steps">
+      <li><b>1</b><span>気分に合う色を3つ</span></li>
+      <li><b>2</b><span>同じ3色の人とグループに</span></li>
+      <li><b>3</b><span>1人1曲ずつ持ち寄る</span></li>
+    </ol>
+    <p class="hint center">名前は出ません。やり取りは曲だけ。毎朝5時に新しい1日になります。</p>
+  </section>
+
+  <!-- today's playlist -->
+  <section class="screen" id="sToday" hidden>
+    <div class="hero">
+      <div class="jacket" id="todayJacket">
+        <span class="j-brand">Now<b>ON</b></span>
+        <span class="j-date" id="todayDate"></span>
+        <span class="j-names" id="todayNames"></span>
+      </div>
+      <div class="stats">
+        <p class="label">今日この3色を選んだ人</p>
+        <p class="count"><span id="todayCount">–</span><small>人</small></p>
+        <p class="sub" id="todaySub"></p>
+        <p class="sub" id="todayClose"></p>
+      </div>
+    </div>
+
+    <div class="card add" id="addCard" hidden>
+      <h2>あなたの1曲を置く</h2>
+      <p class="muted small">音楽アプリの「共有」→「リンクをコピー」で出たリンクを貼るか、曲名で探してください。置けるのは1日1曲です。</p>
+      <form class="add-form" id="addForm">
+        <input class="input" id="addInput" autocomplete="off" enterkeyhint="search" placeholder="リンクを貼る / 曲名・アーティスト名" aria-label="曲のリンクか曲名">
+        <button class="btn primary" id="addGo">探す</button>
+      </form>
+      <button type="button" class="linkbtn" id="pasteBtn" hidden>📋 コピーしたリンクを貼り付ける</button>
+      <div class="add-out" id="addOut" aria-live="polite"></div>
+    </div>
+
+    <div class="card list-card">
+      <div class="lhead"><h2>今日のプレイリスト</h2><span class="muted small" id="songInfo"></span></div>
+      <ol class="songs" id="songList"></ol>
+      <p class="empty" id="songEmpty" hidden>まだ曲がありません。<br>最初の1曲を置いてみましょう。</p>
+    </div>
+
+    <div class="card neighbor" id="nbCard" hidden>
+      <div class="nb-head">
+        <div class="mini-j" id="nbJacket" aria-hidden="true"></div>
+        <div><h2>となりのグループから1曲</h2><p class="muted small" id="nbWhy"></p></div>
+      </div>
+      <ol class="songs" id="nbList"></ol>
+    </div>
+  </section>
+
+  <!-- calendar -->
+  <section class="screen" id="sCal" hidden>
+    <div class="cal-head">
+      <button class="icon-btn" id="calPrev" aria-label="前の月">‹</button>
+      <h1 class="cal-title" id="calTitle"></h1>
+      <button class="icon-btn" id="calNext" aria-label="次の月">›</button>
+    </div>
+    <div class="cal-dow" aria-hidden="true"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="card cal-stats" id="calStats"></div>
+    <p class="hint center">選んだ日をタップすると、その日のプレイリストを聴き直せます。</p>
+  </section>
+
+  <!-- a past day -->
+  <section class="screen" id="sDay" hidden>
+    <a class="back" href="#cal">‹ きろく</a>
+    <div class="hero">
+      <div class="jacket" id="dayJacket">
+        <span class="j-brand">Now<b>ON</b></span>
+        <span class="j-date" id="dayDate"></span>
+        <span class="j-names" id="dayNames"></span>
+      </div>
+      <div class="stats">
+        <p class="label">この日この3色を選んだ人</p>
+        <p class="count"><span id="dayCount">–</span><small>人</small></p>
+        <p class="sub">このプレイリストは閉じています</p>
+      </div>
+    </div>
+    <div class="card list-card">
+      <div class="lhead"><h2>この日のプレイリスト</h2><span class="muted small" id="daySongInfo"></span></div>
+      <ol class="songs" id="dayList"></ol>
+      <p class="empty" id="dayEmpty" hidden>この日は曲がありませんでした。</p>
+    </div>
+  </section>
+</div>
+
+<nav class="tabs" id="tabs" hidden>
+  <a href="#" data-v="today"><span aria-hidden="true">●</span>今日</a>
+  <a href="#cal" data-v="cal"><span aria-hidden="true">▦</span>きろく</a>
+</nav>
+
+<!-- settings -->
+<div class="sheet" id="shSet" hidden><div class="panel" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+  <div class="grab"></div>
+  <div class="sh"><h2 id="setTitle">設定</h2><button class="x" data-close aria-label="閉じる">✕</button></div>
+  <div class="sec box">
+    <h3 class="box-h">いつも使う音楽アプリ</h3>
+    <div class="seg three" id="appPick" role="radiogroup" aria-label="いつも使う音楽アプリ">
+      <button type="button" role="radio" data-a="spotify">Spotify</button>
+      <button type="button" role="radio" data-a="apple">Apple Music</button>
+      <button type="button" role="radio" data-a="youtube">YouTube Music</button>
+    </div>
+    <p class="hint">プレイリストの曲を、このアプリで開くボタンが大きくなります。ほかの人がどのアプリで置いた曲でも、同じ曲を開けます(見つからないときはそのアプリの検索が開きます)。</p>
+  </div>
+  <div class="sec box">
+    <h3 class="box-h">画面の明るさ</h3>
+    <div class="seg three" id="themePick" role="radiogroup" aria-label="画面の明るさ">
+      <button type="button" role="radio" data-t="auto">自動</button>
+      <button type="button" role="radio" data-t="dark">ダーク</button>
+      <button type="button" role="radio" data-t="light">ライト</button>
+    </div>
+  </div>
+  <div class="sec box">
+    <h3 class="box-h">Now ON のきまり</h3>
+    <ul class="rules-list">
+      <li>名前やプロフィールはありません。やり取りは曲だけです。</li>
+      <li>置けるのは音楽アプリの曲だけ。ふつうのURLは置けません。</li>
+      <li>1日1曲。置いた曲は変えられません。</li>
+      <li>毎朝5時にプレイリストは閉じて、3色と曲は「きろく」に残ります。</li>
+      <li>気になる曲は、曲の「…」から通報できます。</li>
+    </ul>
+  </div>
+  <button type="button" class="reload-row" id="reloadBtn">最新の状態に読み込み直す</button>
+</div></div>
+
+<!-- confirm -->
+<div class="sheet" id="shConfirm" hidden><div class="panel small-panel" role="dialog" aria-modal="true" aria-labelledby="cfTitle">
+  <div class="grab"></div>
+  <div class="sh"><h2 id="cfTitle"></h2><button class="x" data-close aria-label="閉じる">✕</button></div>
+  <div id="cfBody"></div>
+  <div class="cf-actions"><button type="button" class="btn" data-close>やめる</button><button type="button" class="btn primary" id="cfOk"></button></div>
+</div></div>
+
+<!-- report -->
+<div class="sheet" id="shReport" hidden><div class="panel small-panel" role="dialog" aria-modal="true" aria-labelledby="rpTitle">
+  <div class="grab"></div>
+  <div class="sh"><h2 id="rpTitle">この曲を通報する</h2><button class="x" data-close aria-label="閉じる">✕</button></div>
+  <p class="muted small" id="rpSong"></p>
+  <div class="rp-why" id="rpWhy"></div>
+  <p class="hint">通報した曲は、あなたの画面には表示されなくなります。運営が確認して対応します。</p>
+</div></div>
+
+<div class="updating" id="updating" hidden><div class="spin" aria-hidden="true"></div><p>新しい版にしています…</p></div>
+<div class="offline" id="offline" role="status" hidden>接続が切れています</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-check-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/base.js"></script>
+<script src="js/music.js"></script>
+<script src="js/data.js"></script>
+<script src="js/render.js"></script>
+<script src="js/events.js"></script>
+<script src="js/boot.js"></script>
+</body>
+</html>
