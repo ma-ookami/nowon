@@ -39,7 +39,8 @@
   </section>
 
   <!-- choose today's 3 colors -->
-  <section class="screen" id="sPick" hidden>
+  <section class="screen two" id="sPick" hidden>
+    <div class="col col-a">
     <div class="pick-head">
       <p class="eyebrow" id="pickDate"></p>
       <h1 class="title">今日の気分を、<br>3色で。</h1>
@@ -52,6 +53,8 @@
     <p class="pick-hint" id="pickHint" aria-live="polite"></p>
     <button class="btn primary big" id="pickGo" disabled>この3色にする</button>
     <div class="notice" id="incomingNote" hidden>共有された曲は、3色を選んだあとに追加できます</div>
+    </div>
+    <div class="col col-b">
     <div class="card ymine" id="ymPick" hidden></div>
     <div class="card rank" id="rankCard" hidden>
       <h2>昨日いちばん選ばれた3色</h2>
@@ -63,10 +66,12 @@
       <li><b>3</b><span>1人1曲ずつ持ち寄る</span></li>
     </ol>
     <p class="hint center">名前は出ません。やり取りは曲だけ。毎朝5時に新しい1日になります。</p>
+    </div>
   </section>
 
   <!-- today's playlist -->
-  <section class="screen" id="sToday" hidden>
+  <section class="screen two" id="sToday" hidden>
+    <div class="col col-a">
     <div class="hero">
       <div class="jacket" id="todayJacket">
         <span class="j-brand">Now<b>ON</b></span>
@@ -94,6 +99,8 @@
       <div class="add-out" id="addOut" aria-live="polite"></div>
     </div>
 
+    </div>
+    <div class="col col-b">
     <div class="card list-card">
       <div class="lhead"><h2>今日のプレイリスト</h2><span class="muted small" id="songInfo"></span></div>
       <ol class="songs" id="songList"></ol>
@@ -113,10 +120,12 @@
       </div>
       <ol class="songs" id="nbList"></ol>
     </div>
+    </div>
   </section>
 
   <!-- calendar -->
-  <section class="screen" id="sCal" hidden>
+  <section class="screen two" id="sCal" hidden>
+    <div class="col col-a">
     <div class="cal-head">
       <button class="icon-btn" id="calPrev" aria-label="前の月">‹</button>
       <h1 class="cal-title" id="calTitle"></h1>
@@ -124,20 +133,28 @@
     </div>
     <div class="cal-dow" aria-hidden="true"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
     <div class="cal-grid" id="calGrid"></div>
+    </div>
+    <div class="col col-b">
     <div class="card cal-stats" id="calStats"></div>
     <p class="hint center">選んだ日をタップすると、その日のプレイリストを聴き直せます。</p>
+    </div>
   </section>
 
   <!-- my shelf -->
-  <section class="screen" id="sShelf" hidden>
+  <section class="screen two" id="sShelf" hidden>
+    <div class="col col-a">
     <div class="shelf-head"><h1 class="cal-title">ボード</h1><span class="muted small" id="shelfInfo"></span></div>
     <p class="muted small shelf-lead">気になった曲の 📌 を押すと、ここに貼っておけます。プレイリストが閉じても消えません。</p>
+    </div>
+    <div class="col col-b">
     <div class="card list-card"><ol class="songs" id="shelfList"></ol>
       <p class="empty" id="shelfEmpty" hidden>まだ何もありません。<br>今日のプレイリストで、気になった曲の 📌 を押してみましょう。</p></div>
+    </div>
   </section>
 
   <!-- a past day -->
-  <section class="screen" id="sDay" hidden>
+  <section class="screen two" id="sDay" hidden>
+    <div class="col col-a">
     <a class="back" href="#cal">‹ きろく</a>
     <div class="hero">
       <div class="jacket" id="dayJacket">
@@ -151,10 +168,13 @@
         <p class="sub">このプレイリストは閉じています</p>
       </div>
     </div>
+    </div>
+    <div class="col col-b">
     <div class="card list-card">
       <div class="lhead"><h2>この日のプレイリスト</h2><span class="muted small" id="daySongInfo"></span></div>
       <ol class="songs" id="dayList"></ol>
       <p class="empty" id="dayEmpty" hidden>この日は曲がありませんでした。</p>
+    </div>
     </div>
   </section>
 </div>
